@@ -1,9 +1,12 @@
 /* Offline cache for ABR Unlock: serve instantly from cache, refresh in the background. */
-var CACHE = 'abr-unlock-v3.0';
+var CACHE = 'abr-unlock-v3.2';
 var ASSETS = ['./', './index.html', './app.js', './fsrs.js', './sqlite.js', './anki.js', './vendor/katex.min.js', './vendor/jszip.min.js'];
 
 self.addEventListener('install', function (e) {
-  e.waitUntil(caches.open(CACHE).then(function (c) { return c.addAll(ASSETS); }).then(function () { return self.skipWaiting(); }));
+  // cache what exists; one missing file must not stop the app from installing offline
+  e.waitUntil(caches.open(CACHE).then(function (c) {
+    return Promise.all(ASSETS.map(function (a) { return c.add(a).catch(function () {}); }));
+  }).then(function () { return self.skipWaiting(); }));
 });
 
 self.addEventListener('activate', function (e) {

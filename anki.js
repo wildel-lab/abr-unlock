@@ -5,7 +5,7 @@
   'use strict';
 
   var IMAGE_EXT = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', svg: 'image/svg+xml', bmp: 'image/bmp', avif: 'image/avif', heic: 'image/heic' };
-  var NEW_FORMAT_MSG = 'This file was exported in Anki’s newest package format, which ABR Unlock can’t read. In Anki, export again as “Anki Deck Package (.apkg)” with “Support older Anki versions” ticked (keep “Include media” ticked too).';
+  var NEW_FORMAT_MSG = 'This file was exported in Anki’s newest package format, which ABR Unlock can’t read. In Anki, export again (Deck Package .apkg or Collection Package .colpkg) with “Support older Anki versions” ticked, and keep “Include media” ticked.';
 
   function stripHtml(s) {
     return String(s == null ? '' : s).replace(/<br\s*\/?>/gi, ' ').replace(/<[^>]*>/g, ' ')
@@ -82,7 +82,7 @@
     var zip = await JSZip.loadAsync(file);
     var dbEntry = zip.file('collection.anki21') || zip.file('collection.anki2');
     var hasNew = !!zip.file('collection.anki21b');
-    if (!dbEntry) throw new Error(hasNew ? NEW_FORMAT_MSG : 'This doesn’t look like an Anki package (.apkg).');
+    if (!dbEntry) throw new Error(hasNew ? NEW_FORMAT_MSG : 'This doesn’t look like an Anki package (.apkg or .colpkg).');
     var db = SQLiteLite.open(await dbEntry.async('arraybuffer'));
     if (!db.has('col') || !db.has('notes') || !db.has('cards')) throw new Error(hasNew ? NEW_FORMAT_MSG : 'Unrecognised Anki collection.');
     var col = db.rows('col')[0];

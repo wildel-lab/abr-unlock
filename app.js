@@ -5,7 +5,7 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = '3.0';
+  var APP_VERSION = '3.2';
   var PASS_SHORTCUT = 'ABR Pass';
   var MAX_TOKENS_PER_CALL = 400;
   var DAY = 86400000;
@@ -257,7 +257,7 @@
   }
   async function renderRich(el, text, isHtml) {
     var html = isHtml
-      ? AnkiPkg.convertLatex(String(text == null ? '' : text)).replace(/\[sound:[^\]]*\]/g, '')
+      ? (window.AnkiPkg ? AnkiPkg.convertLatex(String(text == null ? '' : text)) : String(text == null ? '' : text)).replace(/\[sound:[^\]]*\]/g, '')
       : esc(text).replace(/\r?\n/g, '<br>');
     var body = new DOMParser().parseFromString('<!doctype html><body>' + html, 'text/html').body;
     sanitize(body);
@@ -965,6 +965,7 @@
     var focus = s.mode === 'focus';
     app.innerHTML =
       '<h1>ABR Unlock</h1><p class="muted small">Spaced repetition before your apps open.</p>' +
+      missingHtml() +
       (msg ? '<div class="notice">' + msg + '</div>' : '') +
       '<div class="seg" role="group" aria-label="Study mode">' +
         '<button data-act="mode" data-mode="general"' + (focus ? '' : ' class="on"') + '>General</button>' +
@@ -995,8 +996,9 @@
       '<p class="muted small" style="margin-top:8px">Cards are shown exactly as written, as flashcards: recall the answer, reveal it, rate yourself. Multiple choice appears only for cards that come with their own answer choices; calculation cards ask for a number. “Generated choices” builds options from your other cards and may produce more than one defensible answer.</p></div>' +
 
       '<div class="card"><h2>Import cards</h2>' +
-        '<p class="muted small"><b>Best for Quizlet sets with images:</b> in Anki, export an <b>Anki Deck Package (.apkg)</b> with “Include media” and “Support older Anki versions” ticked. Also accepted: Quizlet .txt export, Anki “Notes in Plain Text”, or CSV. Importing again updates cards and keeps your progress. Anki styling (CSS) and scripts aren’t carried over; text, images and formulas are.</p>' +
-        '<input type="file" id="impFile" accept=".apkg,.txt,.csv,.tsv,.zip,text/plain,text/csv,application/zip">' +
+        '<p class="muted small"><b>Best for Quizlet sets with images:</b> in Anki, export an <b>Anki Deck Package (.apkg)</b> or <b>Collection Package (.colpkg)</b> with “Include media” and “Support older Anki versions” ticked. Also accepted: Quizlet .txt export, Anki “Notes in Plain Text”, or CSV. Importing again updates cards and keeps your progress. Anki styling (CSS) and scripts aren’t carried over; text, images and formulas are.</p>' +
+        '<p class="muted small">Cards are stored in this browser, on this device only. To study on your iPhone, import there; or import on your computer, then use <b>Export full backup</b> and import that .zip on the iPhone.</p>' +
+        '<input type="file" id="impFile">' +
         '<div id="impOpts" class="hidden">' +
           '<div id="impTextOpts"><label for="impDeck">Deck name (if the file has none)</label><input type="text" id="impDeck">' +
           '<div id="impDirWrap"><label for="impDir">Ask</label><select id="impDir">' +
@@ -1051,6 +1053,9 @@
     opts.classList.remove('hidden');
     pendingImport = null;
     try {
+      if (/\.(apkg|zip|colpkg)$/.test(lower) && !window.JSZip) {
+        throw new Error('This website is missing the file vendor/jszip.min.js, which opens .apkg/.colpkg/.zip files. Upload it to the vendor folder of your GitHub repository, wait a minute, then reload this page.');
+      }
       if (/\.(apkg|zip|colpkg)$/.test(lower)) {
         document.getElementById('impTextOpts').classList.add('hidden');
         prev.textContent = 'Reading package…';
@@ -1216,8 +1221,40 @@
   });
 
   /* ================= start ================= */
+  /* ================= self-check: did every app file load? ================= */
+  var LIBS = [
+    { test: function () { return !!window.JSZip; }, paths: ['vendor/jszip.min.js', 'jszip.min.js'], file: 'vendor/jszip.min.js' },
+    { test: function () { return !!window.katex; }, paths: ['vendor/katex.min.js', 'katex.min.js'], file: 'vendor/katex.min.js' },
+    { test: function () { return !!window.SQLiteLite; }, paths: ['sqlite.js'], file: 'sqlite.js' },
+    { test: function () { return !!window.AnkiPkg; }, paths: ['anki.js'], file: 'anki.js' },
+    { test: function () { return !!window.FSRS; }, paths: ['fsrs.js'], file: 'fsrs.js' }
+  ];
+  var MISSING = [];
+  function loadScript(src) {
+    return new Promise(function (res) {
+      var el = document.createElement('script');
+      el.src = src;
+      el.onload = function () { res(true); };
+      el.onerror = function () { el.remove(); res(false); };
+      document.head.appendChild(el);
+    });
+  }
+  async function ensureLibs() {
+    MISSING = [];
+    for (var i = 0; i < LIBS.length; i++) {
+      // retry the expected place, then the site's top folder (a common upload slip)
+      for (var j = 0; j < LIBS[i].paths.length && !LIBS[i].test(); j++) await loadScript(LIBS[i].paths[j] + '?r=' + Date.now());
+      if (!LIBS[i].test()) MISSING.push(LIBS[i].file);
+    }
+  }
+  function missingHtml() {
+    return MISSING.length ? '<div class="notice"><b>Some app files didn’t load:</b> ' + MISSING.map(esc).join(', ') +
+      '. Check they are in your GitHub repository at exactly those paths (the <code>vendor</code> folder included), wait a minute, then reload.</div>' : '';
+  }
+
   async function start() {
     try {
+      await ensureLibs();
       await openDB();
       if (!(await kv('settingsHistory', [])).length) {
         var s0 = await settings();
